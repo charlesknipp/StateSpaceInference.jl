@@ -56,8 +56,8 @@ end
         rw_kernel   = θ -> MvNormal(θ, (0.1)*I(2))
         pmmh_kernel = PMMH(1000, rw_kernel, local_level, prior)
 
-        @suppress_out kf_sample = sample(rng, pmmh_kernel, y, KF(); burn_in = 200)
-        @suppress_out pf_sample = sample(rng, pmmh_kernel, y, PF(256, 1.0); burn_in = 200)
+        kf_sample = @suppress sample(rng, pmmh_kernel, y, KF(); burn_in = 200)
+        pf_sample = @suppress_out sample(rng, pmmh_kernel, y, PF(256, 1.0); burn_in = 200)
 
         kf_mean = mean(getproperty.(kf_sample, :params))
         @test norm(kf_mean-true_params) ≤ 1
@@ -67,8 +67,8 @@ end
     end
 
     @testset "sequential monte carlo algorithms" begin
-        @suppress_out kf_particles = batch_tempered_smc(rng, SMC(128, KF()), y, local_level, prior)
-        @suppress_out pf_particles = batch_tempered_smc(rng, SMC(128, PF(64, 1.0)), y, local_level, prior)
+        kf_particles = @suppress batch_tempered_smc(rng, SMC(128, KF()), y, local_level, prior)
+        pf_particles = @suppress batch_tempered_smc(rng, SMC(128, PF(64, 1.0)), y, local_level, prior)
 
         kf_mean = parameter_mean(kf_particles)
         @test norm(kf_mean-true_params) ≤ 1
