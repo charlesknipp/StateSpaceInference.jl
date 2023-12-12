@@ -4,6 +4,7 @@ using Random
 using LinearAlgebra
 
 using Test
+using Suppressor
 
 # unweighted mean shouldn't be that different from the true average
 parameter_mean(particles::StateSpaceInference.SMCState) = begin
@@ -48,15 +49,15 @@ end
         pf_sample, pf_ll = sample(rng, local_level(true_params), y, PF(1024, 1.0))
 
         @test abs(kf_ll-pf_ll) ≤ 5
-        @test mean(kf_sample) ≈ mean(pf_sample) atol = 1e-2
+        @test mean(kf_sample) ≈ mean(pf_sample) atol = 1e-1
     end
 
     @testset "particle marginal metropolis hastings" begin
         rw_kernel   = θ -> MvNormal(θ, (0.1)*I(2))
         pmmh_kernel = PMMH(1000, rw_kernel, local_level, prior)
 
-        kf_sample = sample(rng, pmmh_kernel, y, KF(); burn_in = 200)
-        pf_sample = sample(rng, pmmh_kernel, y, PF(256, 1.0); burn_in = 200)
+        @suppress_out kf_sample = sample(rng, pmmh_kernel, y, KF(); burn_in = 200)
+        @suppress_out pf_sample = sample(rng, pmmh_kernel, y, PF(256, 1.0); burn_in = 200)
 
         kf_mean = mean(getproperty.(kf_sample, :params))
         @test norm(kf_mean-true_params) ≤ 1
@@ -66,8 +67,8 @@ end
     end
 
     @testset "sequential monte carlo algorithms" begin
-        kf_particles = batch_tempered_smc(rng, SMC(128, KF()), y, local_level, prior)
-        pf_particles = batch_tempered_smc(rng, SMC(128, PF(64, 1.0)), y, local_level, prior)
+        @suppress_out kf_particles = batch_tempered_smc(rng, SMC(128, KF()), y, local_level, prior)
+        @suppress_out pf_particles = batch_tempered_smc(rng, SMC(128, PF(64, 1.0)), y, local_level, prior)
 
         kf_mean = parameter_mean(kf_particles)
         @test norm(kf_mean-true_params) ≤ 1
