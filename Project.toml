@@ -1,7 +1,7 @@
 name = "StateSpaceInference"
 uuid = "8583ecf1-8684-4f91-a25a-60406f5ba88d"
 authors = ["Charles Knipp"]
-version = "1.0.0-DEV"
+version = "1.0.0"
 
 [deps]
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
