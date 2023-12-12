@@ -1,3 +1,8 @@
+"""
+    Abstract Filter
+"""
+abstract type AbstractFilter end
+
 struct KalmanFilter <: AbstractFilter end
 
 KF() = KalmanFilter()
