@@ -41,12 +41,6 @@ Base.@propagate_inbounds Base.getindex(pc::ParticleContainer, i::Int) = pc.vals[
 Base.@propagate_inbounds Base.getindex(pc::ParticleContainer, i::Vector{Int}) = pc.vals[i]
 Base.setindex!(pc::ParticleContainer{T}, p::T, i::Int) where T = Base.setindex!(pc.vals, p, i)
 
-# import SSMProblems: Particle, ParticleContainer, linearize
-# import SSMProblems: AbstractStateSpaceModel, transition!!, emission_logdensity
-
-# export Particle, ParticleContainer, linearize
-# export  AbstractStateSpaceModel, transition!!, emission_logdensity
-
 function generate_data(rng, model, T::Int)
     y = []
     x = [rand(rng, f0(model))]
