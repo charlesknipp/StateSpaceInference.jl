@@ -109,14 +109,3 @@ using Plots
 # use the node structure to recover the "smoothed" states
 plot(reverse(smoothed_states(pf_smc)[1,:]), label="smoothed trend")
 plot!(2:256, fred_data.pce, label="data")
-
-## SMOOTHER TESTS #############################################################
-
-using StatsBase
-
-test_model = harvey_trimbur(2, 1, last(kf_pmmh).params; initial_observation = fred_data.pce[1])
-ss = forward_trajectories(rng,test_model, fred_data.pce[1:50], PF(256, 1.0))
-
-sm_sts = smooth(rng,test_model,fred_data.pce[1:50],PF(256,1.0),FFBS(10))
-
-getproperty.(ss[1][end],:state)
