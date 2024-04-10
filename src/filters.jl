@@ -67,7 +67,7 @@ ess(weights) = inv(sum(abs2, weights))
 
 function systematic_resampling(
         rng::AbstractRNG,
-        weights::Vector{WT},
+        weights::AbstractVector{WT},
         n::Int64 = length(weights)
     ) where WT <: Real
     # pre-calculations
