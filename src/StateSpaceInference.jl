@@ -18,6 +18,7 @@ import Distributions: sample
 import GaussianDistributions: Gaussian
 import StatsBase: weights, mean, cov, mean_and_cov
 import Statistics: mean, cov
+import SSMProblems: AbstractStateSpaceModel, transition!!, emission_logdensity, transition_logdensity
 
 """
     ParticleContainer{T}

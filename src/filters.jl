@@ -67,9 +67,9 @@ ess(weights) = inv(sum(abs2, weights))
 
 function systematic_resampling(
         rng::AbstractRNG,
-        weights::AbstractVector{<:Real},
+        weights::Vector{WT},
         n::Int64 = length(weights)
-    )
+    ) where WT <: Real
     # pre-calculations
     @inbounds v = n*weights[1]
     u = oftype(v, rand(rng))
@@ -92,12 +92,13 @@ end
 
 function filter_step!(
         rng::AbstractRNG,
-        model::AbstractStateSpaceModel,
+        model::SSMProblems.AbstractStateSpaceModel,
         filter::ParticleFilter
     )
+    # fix this later...
     particles = map(1:filter.num_particles) do i
-        state = transition!!(rng, model)
-        Particle(state)
+        state = SSMProblems.transition!!(rng, model)
+        SSMProblems.Utils.Particle(state)
     end
 
     return ParticleContainer(particles), 0.0
@@ -105,7 +106,7 @@ end
 
 function filter_step!(
         rng::AbstractRNG,
-        model::AbstractStateSpaceModel,
+        model::SSMProblems.AbstractStateSpaceModel,
         particles::ParticleContainer,
         observation,
         filter::ParticleFilter;
@@ -121,14 +122,19 @@ function filter_step!(
 
     # storing particle geneology is not ideal, but allows for smoothing
     for i in eachindex(particles)
-        latent_state = transition!!(rng, model, particles[i].state)
+        latent_state = SSMProblems.transition!!(rng, model, particles[i].state)
         particles[i] = if save_history
-            Particle(particles[i], latent_state)
+            SSMProblems.Utils.Particle(particles[i], latent_state)
         else
-            Particle(latent_state)
+            SSMProblems.Utils.Particle(latent_state)
         end
 
-        log_marginals[i] = emission_logdensity(model, particles[i].state, observation)
+        log_marginals[i] = SSMProblems.emission_logdensity(
+            model,
+            particles[i].state,
+            observation
+        )
+
         particles.log_weights[i] += log_marginals[i]
     end
 

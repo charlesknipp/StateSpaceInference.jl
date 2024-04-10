@@ -23,6 +23,7 @@ function SMC(
     )
 end
 
+# maybe a type inference bug here!
 function resample(
         rng::AbstractRNG,
         smc::SequentialMonteCarlo,
@@ -44,6 +45,7 @@ Base.show(io::IO, particles::SMCState{θT,XT}) where {θT, XT} = begin
     print(io, "Particles{$XT}: ($(mean(particles)))")
 end
 
+# maybe some type instability here
 function initialize_particles(
         rng::AbstractRNG,
         model,
@@ -71,7 +73,7 @@ end
 rw_kernel(particles::SMCState) = begin
     parameters = vcat(get_parameters(particles)'...)
     weights = StatsBase.weights(softmax(particles.log_weights))
-    Σθ = (2.38/size(parameters, 2))*cov(parameters, weights, 1)
+    Σθ = ((2.38^2)/size(parameters, 2))*cov(parameters, weights, 1)
     return θ -> MvNormal(θ, Σθ)
 end
 
@@ -194,6 +196,7 @@ function batch_tempered_smc(
         particles.parameters = getproperty.(chains, :params)
         particles.states = getproperty.(chains, :states)
         logposts = getproperty.(chains, :log_evidence)
+        # logposts = move_particles!(rng, particles, smc, data, model, prior)
     end
 
     return particles
@@ -222,26 +225,27 @@ function smc_iter(
     print("\r"*ess_tracker)
 
     if ess(weights) < minimum_ess(smc)
-        ## resampling
-        idx = resample(rng, smc, weights)
-        particles.parameters = particles.parameters[idx]
-        particles.states = particles.states[idx]
-        fill!(particles.log_weights, 0.0)
+        # ## resampling
+        # idx = resample(rng, smc, weights)
+        # particles.parameters = particles.parameters[idx]
+        # particles.states = particles.states[idx]
+        # fill!(particles.log_weights, 0.0)
 
-        ## rejuvenation
-        kernel = rw_kernel(particles)
-        chains = parallel_sample(
-            rng,
-            PMMH(smc.chain_length, kernel, model, prior),
-            smc.filter,
-            data,
-            get_parameters(particles),
-            temperature = ξ,
-            msg = ess_tracker*"\t"
-        )
+        # ## rejuvenation
+        # kernel = rw_kernel(particles)
+        # chains = parallel_sample(
+        #     rng,
+        #     PMMH(smc.chain_length, kernel, model, prior),
+        #     smc.filter,
+        #     data,
+        #     get_parameters(particles),
+        #     temperature = ξ,
+        #     msg = ess_tracker*"\t"
+        # )
 
-        particles.parameters = model.(getproperty.(chains, :params))
-        particles.states = getproperty.(chains, :states)
+        # particles.parameters = model.(getproperty.(chains, :params))
+        # particles.states = getproperty.(chains, :states)
+        move_particles!(rng, particles, smc, data, model, prior)
     end
 
     # for thread local reproducibility of parallel processing
@@ -260,3 +264,12 @@ function smc_iter(
 
     return particles
 end
+
+# function streaming_smc(
+#         smc::SequentialMonteCarlo,
+#         data::AbstractVector,
+#         model,
+#         prior::Distribution
+#     )
+    
+# end
