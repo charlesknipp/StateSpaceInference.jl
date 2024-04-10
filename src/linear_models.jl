@@ -68,14 +68,14 @@ f(x::Vector{<:Number}, model::LinearGaussianStateSpaceModel) = Gaussian(model.A*
 g(x::Vector{<:Number}, model::LinearGaussianStateSpaceModel) = Gaussian(model.B*x, model.R)
 
 # Sampling process
-function transition!!(
+function SSMProblems.transition!!(
         rng::AbstractRNG,
         model::LinearGaussianStateSpaceModel
     )
     return rand(rng, f0(model))
 end
 
-function transition!!(
+function SSMProblems.transition!!(
         rng::AbstractRNG,
         model::LinearGaussianStateSpaceModel,
         state::Vector{Float64}
@@ -83,7 +83,7 @@ function transition!!(
     return rand(rng, f(state, model))
 end
 
-function transition_logdensity(
+function SSMProblems.transition_logdensity(
         model::LinearGaussianStateSpaceModel,
         prev_state::Vector{XT},
         state::Vector{XT}
@@ -96,7 +96,7 @@ function transition_logdensity(
     end
 end
 
-function emission_logdensity(
+function SSMProblems.emission_logdensity(
         model::LinearGaussianStateSpaceModel,
         state::Vector{XT},
         observation::Vector{<:Number}
@@ -104,7 +104,7 @@ function emission_logdensity(
     return logpdf(g(state, model), observation)
 end
 
-function emission_logdensity(
+function SSMProblems.emission_logdensity(
         model::LinearGaussianStateSpaceModel,
         state::Vector{XT},
         observation::Number
