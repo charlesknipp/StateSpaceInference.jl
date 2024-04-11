@@ -6,97 +6,119 @@ using LinearAlgebra, MatrixEquations
 
 ## UC PROCESSES ###############################################################
 
-struct StochasticCycle{XT,ΣT}
-    T::Matrix{XT}
+struct StochasticCycle{XT<:AbstractArray,ΦT<:AbstractMatrix,ΣT<:Real}
+    ϕ::ΦT
     σ::ΣT
     θ::NamedTuple{(:λ, :ρ, :σκ²)}
     n::Int64
 
-    function StochasticCycle(
-        n::Int64, ρ::Float64, λ::ΛT, σκ²::ΣT
-    ) where {ΛT<:Number,ΣT<:Number}
+    function StochasticCycle{XT}(
+        n::Int64, ρ::ΡT, λ::ΛT, σκ²::ΣT
+    ) where {ΡT<:Real,ΛT<:Real,ΣT<:Real,XT}
         params = (λ=λ, ρ=ρ, σκ²=σκ²)
 
         cosλ = cospi(λ)
         sinλ = sinpi(λ)
         
-        Tψ  = kron(I(n), ρ*[cosλ sinλ;-sinλ cosλ])
-        Tψ += kron(diagm(1 => ones(n-1)), I(2))
+        ϕ  = kron(I(n), ρ*[cosλ sinλ;-sinλ cosλ])
+        ϕ += kron(diagm(1 => ones(n-1)), I(2))
 
-        new{eltype(Tψ),ΣT}(Tψ, sqrt(σκ²), params, n)
+        return new{XT,typeof(ϕ),ΣT}(ϕ, sqrt(σκ²), params, n)
     end
 end
 
-# this could be calculated only once...
+# outer constructor for unspecified state types
+function StochasticCycle(
+    n::Int64, ρ::ΡT, λ::ΛT, σκ²::ΣT
+) where {ΡT<:Real,ΛT<:Real,ΣT<:Real}
+    XT = promote_type(ΡT,ΛT,ΣT)
+    return StochasticCycle{Vector{XT}}(n, ρ, λ, σκ²)
+end
+
+# sample from the transition process prior density
 function initial_draw(
     rng::AbstractRNG,
-    cycle::StochasticCycle
-)
+    cycle::StochasticCycle{ΨT}
+)::ΨT where ΨT <: AbstractArray
     dim = 2*cycle.n
     Σψ = zeros(dim,dim)
 
-    Σψ[end-1,end-1] = cycle.θ.σκ²
-    Σψ[end,end] = cycle.θ.σκ²
+    σκ² = cycle.σ^2
+    Σψ[end-1,end-1] = σκ²
+    Σψ[end,end] = σκ²
 
-    return rand(rng,MvNormal(lyapd(cycle.T,Σψ)))
+    # get eltype of ::ΨT and convert the distribution
+    init_dist = convert(
+        MvNormal{ΨT.parameters[1]},
+        MvNormal(lyapd(cycle.ϕ,Σψ))
+    )
+
+    return rand(rng,init_dist)
 end
 
+# sample from the state transition density
 @inline function transition(
     rng::AbstractRNG,
-    cycle::StochasticCycle,
-    ψ::AbstractArray{ΨT}
-) where ΨT <: Number
-    ψ = cycle.T*ψ
-    ψ[end-1:end] += cycle.σ*randn(rng, ΨT, 2)
-    return ψ
+    cycle::StochasticCycle{ΨT},
+    ψ::ΨT
+) where ΨT <: AbstractArray
+    ΦT = eltype(ψ)
+    ψ = cycle.ϕ*ψ
+    ψ[end-1:end] += cycle.σ*randn(rng, ΦT, 2)
+    return convert(ΨT,ψ)
 end
 
-struct StochasticTrend{XT,ΣT}
-    T::Matrix{XT}
+struct StochasticTrend{XT<:AbstractArray,ΣT<:Real}
+    ϕ::Matrix{Float64}
     σ::ΣT
     θ::NamedTuple{(:σε²,)}
     m::Int64
 
-    init_state::Float64
+    init_state::XT
 
-    function StochasticTrend(
-        m::Int64, σε²::ΣT, init_state::Float64 = 0.0
-    ) where ΣT<:Number
+    function StochasticTrend{XT}(
+        m::Int64, σε²::ΣT, init_obs::YT = 0.0
+    ) where {ΣT<:Real,YT<:Real,XT}
         params = (σε²=σε²,)
-        Tx = UpperTriangular(ones(m, m))
-        new{eltype(Tx),ΣT}(Tx, sqrt(σε²), params, m, init_state)
+        ϕ = UpperTriangular(ones(m, m))
+        
+        init_state = zeros(YT,m)
+        init_state[1] = init_obs
+        
+        return new{XT,ΣT}(ϕ, sqrt(σε²), params, m, convert(XT,init_state))
     end
 end
 
-function initial_draw(
-    rng::AbstractRNG,
-    trend::StochasticTrend
-)
-    init_state = rand(rng,MvNormal(1.e1*I(trend.m)))
-    init_state[1] += trend.init_state
-    return init_state
+# outer constructor for unspecified state types
+function StochasticTrend(
+    m::Int64, σε²::ΣT, init_obs::YT = 0.0
+) where {ΣT<:Real,YT<:Real}
+    return StochasticTrend{Vector{YT}}(m, σε², init_obs)
 end
 
+# sample from the transition process prior density
+function initial_draw(
+    rng::AbstractRNG,
+    trend::StochasticTrend{XT}
+)::XT where XT <: AbstractArray
+    return trend.init_state + rand(rng,MvNormal(1.e1*I(trend.m)))
+end
+
+# sample from the state transition density
 @inline function transition(
     rng::AbstractRNG,
     trend::StochasticTrend,
-    x::AbstractArray{XT}
-) where XT <: Number
-    x = trend.T*x
-    x[end] += trend.σ*randn(rng,XT)
-    return x
+    x::XT
+) where XT
+    ΦT = eltype(x)
+    x = trend.ϕ*x
+    x[end] += trend.σ*randn(rng,ΦT)
+    return convert(XT,x)
 end
 
 ## HARVEY-TRIMBUR #############################################################
 
-Parameters = @NamedTuple begin
-    ση²::Float64
-    σε²::Float64
-    σκ²::Float64
-    ρ::Float64
-    λ::Float64
-end
-
+# could be replaced with ComponentARrays or something more robust...
 struct UnobservedComponents{XT,ΨT}
     trend::XT
     cycle::ΨT
@@ -104,29 +126,29 @@ end
 
 Base.adjoint(uc::UnobservedComponents{XT,ΨT}) where {XT,ΨT} = [uc.trend...,uc.cycle...]'
 
-mutable struct HarveyTrimburSSM{XT,ΨT} <: SSMProblems.AbstractStateSpaceModel
+mutable struct HarveyTrimburSSM{XT,ΨT,ΘT<:Real} <: SSMProblems.AbstractStateSpaceModel
     X::Vector{UnobservedComponents{XT,ΨT}}
     observations::Vector{Float64}
-    θ::Parameters
+    θ::NamedTuple{(:σε², :λ, :ρ, :σκ², :ση²), NTuple{5, ΘT}}
 
-    trend_process::StochasticTrend{Float64,Float64}
-    cycle_process::StochasticCycle{Float64,Float64}
+    trend_process::StochasticTrend{XT,ΘT}
+    cycle_process::StochasticCycle{ΨT,Matrix{ΘT},ΘT}
 
     function HarveyTrimburSSM(
-        θ::NamedTuple{(:ση², :σε², :σκ², :ρ, :λ)},
+        θ::NamedTuple{(:σε², :λ, :ρ, :σκ², :ση²), NTuple{5, ΘT}},
         n::Int64,
         m::Int64,
         init_state::Float64 = 0.0
-    )
+    ) where ΘT <: Real
         XT = Vector{Float64}
         ΨT = Vector{Float64}
 
         trend = StochasticTrend(m,θ.σε²,init_state)
         cycle = StochasticCycle(n,θ.ρ,θ.λ,θ.σκ²)
-        return new{XT,ΨT}(
+        return new{XT,ΨT,ΘT}(
             Vector{UnobservedComponents{XT,ΨT}}(),
             Vector{Float64}(),
-            Parameters(θ),
+            θ,
             trend,
             cycle,
         )
@@ -139,10 +161,10 @@ mutable struct HarveyTrimburSSM{XT,ΨT} <: SSMProblems.AbstractStateSpaceModel
     )
         XT = Vector{Float64}
         ΨT = Vector{Float64}
-        return new{XT,ΨT}(
+        return new{XT,ΨT,Float64}(
             Vector{UnobservedComponents{XT,ΨT}}(),
             Vector{Float64}(),
-            Parameters((trend.θ...,cycle.θ...,ση²=ση²)),
+            merge(trend.θ,cycle.θ,(ση²=ση²,)),
             trend,
             cycle
         )
@@ -156,10 +178,10 @@ mutable struct HarveyTrimburSSM{XT,ΨT} <: SSMProblems.AbstractStateSpaceModel
     )
         XT = Vector{Float64}
         ΨT = Vector{Float64}
-        return new{XT,ΨT}(
+        return new{XT,ΨT,Float64}(
             Vector{UnobservedComponents{XT,ΨT}}(),
             observations,
-            Parameters((trend.θ...,cycle.θ...,ση²=ση²)),
+            merge(trend.θ,cycle.θ,(ση²=ση²,)),
             trend,
             cycle
         )
@@ -168,11 +190,11 @@ end
 
 function SSMProblems.transition!!(
     rng::AbstractRNG,
-    model::HarveyTrimburSSM
-)
+    model::HarveyTrimburSSM{XT,ΨT}
+) where {XT,ΨT}
     x = initial_draw(rng,model.trend_process)
     ψ = initial_draw(rng,model.cycle_process)
-    return UnobservedComponents(x,ψ)
+    return UnobservedComponents{XT,ΨT}(x,ψ)
 end
 
 ## FOR COMPATIBILITY WITH StateSpaceInference.jl ##############################
@@ -208,16 +230,23 @@ gdp_data = fred_data.gdp
 
 using BenchmarkTools
 
-demo_model = HarveyTrimburSSM(
+# use the convenience constructor for now
+rng = Random.MersenneTwister(1234)
+model = HarveyTrimburSSM(
     StochasticTrend(2,1.29,816.542),
     StochasticCycle(3,0.714,0.352,2.54),
     12.9
 )
 
-rng = Random.MersenneTwister(1234)
+# 109.684 ms (1,598,205 allocations: 148.00 MiB)
+@btime sample($rng,$model,$gdp_data,$(PF(1024,1.0)))
 
-# 105.894 ms (1,599,229 allocations: 147.95 MiB)
-@btime sample($rng,$demo_model,$gdp_data,$(PF(1024,1.0)))
+# ensure that this has NO type instability
+@code_warntype HarveyTrimburSSM(
+    (model.θ), 3, 2, 816.542
+)
+
+@profview sample(rng,model,gdp_data,PF(1024,1.0))
 
 ## SMC ########################################################################
 
@@ -227,7 +256,7 @@ function harvey_trimbur(
     params::AbstractVector{<:Real},
     init_state::Float64
 )
-    θ = NamedTuple{(:ση², :σε², :σκ², :ρ, :λ)}(params)
+    θ = NamedTuple{(:σε², :λ, :ρ, :σκ², :ση²)}(params)
     return HarveyTrimburSSM(θ, n, m, init_state)
 end
 
@@ -251,4 +280,4 @@ ht_smc(smc,data) = begin
 end
 
 # run over the entire set
-particles = ht_smc(SMC(256, PF(2048, 1.0)), fred_data.gdp)
+particles = ht_smc(SMC(256, PF(512, 1.0)), fred_data.gdp)
