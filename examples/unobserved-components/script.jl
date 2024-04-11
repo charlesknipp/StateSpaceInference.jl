@@ -118,7 +118,7 @@ end
 
 ## HARVEY-TRIMBUR #############################################################
 
-# could be replaced with ComponentARrays or something more robust...
+# could be replaced with ComponentArrays or something more robust...
 struct UnobservedComponents{XT,ΨT}
     trend::XT
     cycle::ΨT
@@ -262,10 +262,10 @@ end
 
 prior = product_distribution(
     LogNormal(),
-    LogNormal(),
-    LogNormal(),
+    Beta(2.6377, 15.0577),
     Uniform(0.0, 0.99),
-    Beta(2.6377, 15.0577)
+    LogNormal(),
+    LogNormal(),
 )
 
 ht_smc(smc,data) = begin
