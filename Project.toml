@@ -4,6 +4,7 @@ authors = ["Charles Knipp"]
 version = "1.0.0"
 
 [deps]
+ComponentArrays = "b0b7db55-cfe3-40fc-9ded-d10e2dbeff66"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 GaussianDistributions = "43dcc890-d446-5863-8d1a-14597580bb8d"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
