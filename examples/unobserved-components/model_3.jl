@@ -35,7 +35,8 @@ mutable struct HarveyTrimburSSM{XT, ΨT, ΣT, ΘT<:Real} <: SSMProblems.Abstract
 
         ΣT = Base.promote_eltype(η_vol, ε_vol)
         return new{eltype(trend), eltype(cycle), ΣT, ΘT}(
-            θ, trend, cycle, η_vol, ε_vol)
+            θ, trend, cycle, η_vol, ε_vol
+        )
     end
 end
 
