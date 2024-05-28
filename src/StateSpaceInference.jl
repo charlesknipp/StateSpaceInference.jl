@@ -14,11 +14,17 @@ using GaussianDistributions
 
 using Printf
 
-import Distributions: sample
 import GaussianDistributions: Gaussian
 import StatsBase: weights, mean, cov, mean_and_cov
 import Statistics: mean, cov
-import SSMProblems: AbstractStateSpaceModel, transition!!, emission_logdensity, transition_logdensity
+
+# reexport transition!!, emission_logdensity, and transition_logdensity
+using SSMProblems: AbstractStateSpaceModel, transition!!, emission_logdensity, transition_logdensity
+export transition!!, emission_logdensity, transition_logdensity
+
+# reexport sample
+using StatsBase: sample
+export sample
 
 """
     ParticleContainer{T}

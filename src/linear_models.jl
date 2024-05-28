@@ -30,7 +30,7 @@ end
 TODO: the over reliance on PDMats here is pretty annoying, since it can be wildly
 inefficient to cholesky especially for particle filters
 =#
-struct LinearGaussianStateSpaceModel{XT<:Number} <: AbstractStateSpaceModel
+struct LinearGaussianStateSpaceModel{XT<:Number} <: SSMProblems.AbstractStateSpaceModel
     """
         A state space model with linear dynamics and Gaussian noise.
         The model is defined by the following equations:
