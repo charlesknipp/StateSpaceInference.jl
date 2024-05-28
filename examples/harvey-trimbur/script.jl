@@ -17,8 +17,7 @@ function HarveyTrimbur(
     sinλ = sinpi(params.λ)
 
     Σψ = kron(i_n, params.σκ²*I(2))
-    Σx = zeros(m, m)
-    Σx[end, end] = params.σε²
+    Σx = params.σε²*ones(m, m)
 
     Tψ  = kron(I(n), params.ρ*[cosλ sinλ;-sinλ cosλ])
     Tψ += kron(diagm(1 => ones(n-1)), I(2))
@@ -34,6 +33,7 @@ function HarveyTrimbur(
     init_state = zeros(2*n+m)
     init_state[1] = initial_observation
 
+    # TODO: fix the weird cholesky happening under the new trend covariance
     return LinearGaussianStateSpaceModel(
         init_state,
         cat(Σx0, Σψ0, dims = (1, 2)),
@@ -67,7 +67,7 @@ prior = product_distribution(
 using CSV, DataFrames
 
 # for demonstration, I queried quarterly PCE (index) from FRED
-fred_data = CSV.read("data/fred_data.csv",DataFrame)
+fred_data = CSV.read("data/fred_data.csv", DataFrame)
 
 ## PMMH #######################################################################
 
@@ -75,12 +75,16 @@ rng = StableRNG(1234)
 ht_pmmh = PMMH(
     100,
     θ -> MvNormal(θ, (0.005)*I(5)),
-    θ -> harvey_trimbur(2, 1, θ; initial_observation = fred_data.pce[1]),
+    θ -> harvey_trimbur(
+        1, 2, θ;
+        initial_observation = fred_data.gdp[1],
+        initial_covariance  = 1.e1
+    ),
     prior
 )
 
-kf_pmmh = sample(rng, ht_pmmh, fred_data.pce[1:50], KF())
-pf_pmmh = sample(rng, ht_pmmh, fred_data.pce[1:50], PF(256, 1.0))
+kf_pmmh = sample(rng, ht_pmmh, fred_data.gdp, KF())
+pf_pmmh = sample(rng, ht_pmmh, fred_data.gdp, PF(256, 1.0))
 
 ## SMC ########################################################################
 
@@ -91,14 +95,18 @@ ht_smc(smc,data) = begin
         rng,
         smc,
         data,
-        θ -> harvey_trimbur(2, 2, θ, initial_observation = data[1]),
+        θ -> harvey_trimbur(
+            1, 2, θ;
+            initial_observation = data[1],
+            initial_covariance  = 1.e1
+        ),
         prior
     )
 end
 
 # generally the Kalman filter far out paces the particle filter
 kf_smc = ht_smc(SMC(512, KF()), fred_data.gdp)
-pf_smc = ht_smc(SMC(64, PF(512, 1.0)), fred_data.gdp)
+pf_smc = ht_smc(SMC(256, PF(512, 1.0)), fred_data.gdp)
 
 # more state particles would close this gap
 norm(mean(kf_smc)-mean(pf_smc))
