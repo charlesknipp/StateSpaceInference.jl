@@ -34,21 +34,22 @@ function filter_step!(
     return particle, log_marginal
 end
 
-function sample(
+function StatsBase.sample(
         rng::AbstractRNG,
         model::LinearGaussianStateSpaceModel,
         observations,
         filter::KalmanFilter;
         save_history::Bool = false
     )
-    particle, log_evidence = filter_step!(rng, model, filter)
+    particle, log_prior = filter_step!(rng, model, filter)
+    log_evidence = log_prior
 
     for t in eachindex(observations)
         particle, logℓ = filter_step!(
             rng, model, particle, observations[t], filter;
             save_history = save_history
         )
-        log_evidence  += logℓ
+        log_evidence += logℓ
     end
 
     return particle, log_evidence
@@ -62,7 +63,6 @@ end
 
 PF(N::Int,ess_thrshld::Float64) = ParticleFilter(N, ess_thrshld, systematic_resampling)
 
-# Particle Filter 
 ess(weights) = inv(sum(abs2, weights))
 
 function systematic_resampling(
@@ -142,14 +142,16 @@ function filter_step!(
     return particles, log_marginal
 end
 
-function sample(
+function StatsBase.sample(
         rng::AbstractRNG,
         model::SSMProblems.AbstractStateSpaceModel,
         observations::AbstractVector,
         filter::ParticleFilter;
         save_history::Bool = false
     )
-    particles, log_evidence = filter_step!(rng, model, filter)
+    particles, log_prior = filter_step!(rng, model, filter)
+    log_evidence = log_prior
+
     for t in eachindex(observations)
         particles, log_marginal = filter_step!(
             rng, model, particles, observations[t], filter;
