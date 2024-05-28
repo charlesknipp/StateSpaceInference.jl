@@ -79,7 +79,7 @@ rng = Random.MersenneTwister(1234)
 sample(rng, model, gdp_data, PF(1024, 1.0))
 
 # 102.673 ms (1,598,205 allocations: 141.89 MiB)
-@btime sample($rng,$model,$gdp_data,$(PF(1024,1.0)))
+@btime sample($rng, $model, $gdp_data, $(PF(1024, 1.0)))
 
 ## SMC ########################################################################
 

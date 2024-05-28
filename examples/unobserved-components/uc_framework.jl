@@ -2,7 +2,8 @@ using StateSpaceInference
 using SSMProblems
 using Distributions
 using Random
-using LinearAlgebra, MatrixEquations
+using LinearAlgebra
+using MatrixEquations
 
 ## STOCHASTIC VOLATILITY ######################################################
 
@@ -18,24 +19,31 @@ end
 
 Base.eltype(::StochasticVolatility{ΣT, ΓT}) where {ΣT, ΓT} = ΣT
 
+function Base.promote_eltype(
+        ::StochasticVolatility{ΣT1},
+        ::StochasticVolatility{ΣT2}
+    ) where {ΣT1, ΣT2}
+    return promote_type(ΣT1, ΣT2)
+end
+
 function StochasticVolatility(γ::ΓT, p::Float64) where ΓT<:Real
     return StochasticVolatility{Float64}(γ, p)
 end
 
 # sample from the transition process prior density
 function initial_draw(
-    rng::AbstractRNG,
-    ::StochasticVolatility{ΣT}
-) where ΣT <: Real
+        rng::AbstractRNG,
+        ::StochasticVolatility{ΣT}
+    ) where ΣT <: Real
     return 1.e1*randn(rng, ΣT)
 end
 
 # sample from the state transition density
 @inline function transition(
-    rng::AbstractRNG,
-    vol::StochasticVolatility{ΣT},
-    logσ::ΣT
-) where ΣT <: Real
+        rng::AbstractRNG,
+        vol::StochasticVolatility{ΣT},
+        logσ::ΣT
+    ) where ΣT <: Real
     if rand(rng, Bernoulli(vol.p))
         return logσ + vol.γ*randn(rng, ΣT)
     else
@@ -51,9 +59,8 @@ struct StochasticCycle{XT<:Real, ΦT<:AbstractMatrix, ΣT<:Union{Real, Missing}}
     n::Int64
 
     function StochasticCycle{XT}(
-        n::Int64, ρ::ΡT, λ::ΛT, σκ::ΣT = missing
-    ) where {ΡT<:Real, ΛT<:Real, ΣT, XT}
-
+            n::Int64, ρ::ΡT, λ::ΛT, σκ::ΣT = missing
+        ) where {ΡT<:Real, ΛT<:Real, ΣT, XT}
         cosλ = cospi(λ)
         sinλ = sinpi(λ)
         
@@ -68,25 +75,25 @@ Base.eltype(::StochasticCycle{XT, ΦT, ΣT}) where {XT, ΦT, ΣT} = XT
 
 # define for linear Gaussian process
 function StochasticCycle(
-    n::Int64, ρ::ΡT, λ::ΛT, σκ²::ΣT
-) where {ΡT<:Real, ΛT<:Real, ΣT<:Real}
+        n::Int64, ρ::ΡT, λ::ΛT, σκ²::ΣT
+    ) where {ΡT<:Real, ΛT<:Real, ΣT<:Real}
     XT = promote_type(ΡT, ΛT, ΣT)
     return StochasticCycle{XT}(n, ρ, λ, sqrt(σκ²))
 end
 
 function StochasticCycle(
-    n::Int64, ρ::ΡT, λ::ΛT
-) where {ΡT<:Real, ΛT<:Real}
+        n::Int64, ρ::ΡT, λ::ΛT
+    ) where {ΡT<:Real, ΛT<:Real}
     XT = promote_type(ΡT, ΛT)
     return StochasticCycle{XT}(n, ρ, λ)
 end
 
 # sample from the transition process prior density
 function initial_draw(
-    rng::AbstractRNG,
-    cycle::StochasticCycle{ΨT},
-    σ::ΣT
-) where {ΨT<:Real, ΣT<:Real}
+        rng::AbstractRNG,
+        cycle::StochasticCycle{ΨT},
+        σ::ΣT
+    ) where {ΨT<:Real, ΣT<:Real}
     dim = 2*cycle.n
     Σψ = zeros(ΣT ,dim, dim)
 
@@ -106,22 +113,36 @@ function initial_draw(
 end
 
 @inline function transition(
-    rng::AbstractRNG,
-    cycle::StochasticCycle{ΨT},
-    ψ::AbstractArray{ΨT},
-    σ::ΣT
-) where {ΨT<:Real, ΣT<:Real}
+        rng::AbstractRNG,
+        cycle::StochasticCycle{ΨT},
+        ψ::AbstractArray{ΨT},
+        σ::ΣT
+    ) where {ΨT<:Real, ΣT<:Real}
     ψ = cycle.ϕ*ψ
     ψ[end-1:end] += σ*randn(rng, 2)
     return convert(AbstractArray{ΨT}, ψ)
 end
 
 function transition(
-    rng::AbstractRNG,
-    cycle::StochasticCycle{ΨT, ΦT, ΣT},
-    ψ::AbstractArray{ΨT}
-) where {ΨT<:Real, ΣT<:Real, ΦT}
+        rng::AbstractRNG,
+        cycle::StochasticCycle{ΨT, ΦT, ΣT},
+        ψ::AbstractArray{ΨT}
+    ) where {ΨT<:Real, ΣT<:Real, ΦT}
     return transition(rng, cycle, ψ, cycle.σ)
+end
+
+is_stationary(::StochasticCycle) = true
+
+function Distributions.logpdf(
+        cycle::StochasticCycle{ΨT, ΦT, ΣT},
+        ψ::AbstractArray{ΨT},
+        ψprev::AbstractArray{ΨT}
+    ) where {ΨT<:Real, ΣT<:Real, ΦT}
+    κ = cycle.ϕ*ψprev - ψ
+    return logpdf(
+        MvNormal(zeros(2), (cycle.σ^2)*I(2)),
+        κ[end-1:end]
+    )
 end
 
 ## STOCHASTIC TREND ###########################################################
@@ -134,8 +155,8 @@ struct StochasticTrend{XT<:Real,ΣT<:Union{Real, Missing}}
     init_state::Vector{XT}
 
     function StochasticTrend{XT}(
-        m::Int64, σε::ΣT = missing, init_obs::YT = 0.0
-    ) where {YT<:Real, ΣT, XT}
+            m::Int64, σε::ΣT = missing, init_obs::YT = 0.0
+        ) where {YT<:Real, ΣT, XT}
         ϕ = UpperTriangular(ones(m, m))
         
         init_state = zeros(XT, m)
@@ -149,41 +170,42 @@ Base.eltype(::StochasticTrend{XT, ΣT}) where {XT, ΣT} = XT
 
 # outer constructor for unspecified state types
 function StochasticTrend(
-    m::Int64, σε²::ΣT, init_obs::YT = 0.0
-) where {ΣT<:Real, YT<:Real}
+        m::Int64, σε²::ΣT, init_obs::YT = 0.0
+    ) where {ΣT<:Real, YT<:Real}
     return StochasticTrend{YT}(m, sqrt(σε²), init_obs)
 end
 
 function StochasticTrend(
-    m::Int64, init_obs::YT = 0.0
-) where YT <: Real
+        m::Int64, init_obs::YT = 0.0
+    ) where YT <: Real
     return StochasticTrend{YT}(m, missing, init_obs)
 end
 
 # sample from the transition process prior density
 function initial_draw(
-    rng::AbstractRNG,
-    trend::StochasticTrend{XT}
-) where XT <: Real
-    return trend.init_state + rand(rng, MvNormal(1.e1*I(trend.m)))
+        rng::AbstractRNG,
+        trend::StochasticTrend{XT}
+    ) where XT <: Real
+    return trend.init_state + rand(rng, MvNormal((trend.σ^2)*I(trend.m)))
 end
 
 # sample from the state transition density
 @inline function transition(
-    rng::AbstractRNG,
-    trend::StochasticTrend{XT},
-    x::AbstractArray{XT},
-    σ::ΣT
-) where {XT<:Real, ΣT<:Real}
-    x = trend.ϕ*x
-    x[end] += σ*randn(rng)
+        rng::AbstractRNG,
+        trend::StochasticTrend{XT},
+        x::AbstractArray{XT},
+        σ::ΣT
+    ) where {XT<:Real, ΣT<:Real}
+    # somehow this is the most efficient way to do this...
+    x   = trend.ϕ*x
+    x .+= σ*randn(rng)
     return convert(AbstractArray{XT}, x)
 end
 
 function transition(
-    rng::AbstractRNG,
-    trend::StochasticTrend{XT, ΣT},
-    x::AbstractArray{XT}
-) where {XT<:Real, ΣT<:Real}
+        rng::AbstractRNG,
+        trend::StochasticTrend{XT, ΣT},
+        x::AbstractArray{XT}
+    ) where {XT<:Real, ΣT<:Real}
     return transition(rng, trend, x, trend.σ)
 end
