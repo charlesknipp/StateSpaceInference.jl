@@ -42,15 +42,16 @@ fred_data = CSV.read("data/fred_data.csv",DataFrame)
 
 ## PMMH #######################################################################
 
-rng = MersenneTwister(1234)
+rng = StableRNG(1234)
 true_params = rand(rng, prior)
-x, y = generate_data(rng, local_level(true_params; initial_covariance=1.0), 100)
+x, ys = generate_data(rng, local_level(true_params; initial_covariance=1.0), 100)
+y = vcat(ys...)
 
 rng = StableRNG(1234)
 ll_pmmh = PMMH(
     5_000,
     θ -> MvNormal(θ, (0.1)*I(2)),
-    θ -> local_level(θ; initial_observation = fred_data.pce[1]),
+    θ -> local_level(θ; initial_observation = y[1]),
     prior
 )
 
@@ -95,4 +96,4 @@ sm_particles,_ = smooth(
 plot(fred_data.pce)
 plot(vcat(mean(sm_particles,dims=1)...))
 
-mean(vcat(StateSpaceInference.get_parameters(kf_smc)'...),dims=1)
+mean(vcat(StateSpaceInference.get_parameters(kf_smc)'...), dims=1)
