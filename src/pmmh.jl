@@ -85,7 +85,7 @@ function mcmcsample(
 end
 
 # for true PMCMC, this function preserves the entire chain
-function sample(
+function StatsBase.sample(
         rng::AbstractRNG,
         sampler::ParticleMarginalMetropolisHastings,
         data::AbstractVector,
@@ -163,15 +163,12 @@ function parallel_sample(
     chunksize = div(M, nchunks)
     interval  = 1:nchunks
 
+    # deepcopy the RNG for replicability
     rngs = [deepcopy(rng) for _ in interval]
-    datas = [deepcopy(data) for _ in interval]
-    samplers = [deepcopy(sampler) for _ in interval]
-    filters = [deepcopy(filter) for _ in interval]
-    temps = [deepcopy(temperature) for _ in interval]
 
     # create a channel for progress tracking in parallel
     channel = Channel{Bool}(length(interval))
-    task_list = zip(1:nchunks, rngs, datas, samplers, filters, temps)
+    task_list = zip(1:nchunks, rngs)
     
     # preallocate the chains and define the child seeds
     chains = Vector{Any}(undef, M)
@@ -191,7 +188,7 @@ function parallel_sample(
         end
 
         @async begin
-            @sync for (i, _rng, _data, _sampler, _filter, _temp) in task_list
+            @sync for (i, _rng) in task_list
                 # determine the proper interval for parallelization
                 chainidxs = if i == nchunks
                     ((i-1)*(chunksize)+1):M
@@ -204,11 +201,11 @@ function parallel_sample(
                     Random.seed!(_rng, seeds[chainidx])
                     acc_flags[chainidx, :], chains[chainidx] = mcmcsample(
                         _rng,
-                        _sampler,
-                        _data,
-                        _filter,
+                        sampler,
+                        data,
+                        filter,
                         init_param = _init_param[chainidx],
-                        temperature = _temp
+                        temperature = temperature
                     )
 
                     # update acceptance ratio calculation
@@ -224,7 +221,7 @@ function parallel_sample(
     return chains
 end
 
-function sample(
+function StatsBase.sample(
         rng::AbstractRNG,
         sampler::ParticleMarginalMetropolisHastings,
         filter::AbstractFilter,
