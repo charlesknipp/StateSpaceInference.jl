@@ -72,8 +72,8 @@ gdp_data = fred_data.gdp
 
 using BenchmarkTools
 
-params = (σε²=1.46, λ=0.352, ρ=0.714, σκ²=2.54, ση²=12.9)
-model = HarveyTrimburSSM(params, 2, 2; init_state=816.542)
+params = (σε²=1.46, λ=0.112, ρ=0.714, σκ²=2.54, ση²=12.9)
+model = HarveyTrimburSSM(params, 3, 2; init_state=gdp_data[1])
 
 rng = Random.MersenneTwister(1234)
 sample(rng, model, gdp_data, PF(1024, 1.0))
