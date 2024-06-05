@@ -1,3 +1,4 @@
-/Manifest.toml
+*Manifest.toml
 
 examples/creal-koopman-zivot
+tensorboard_logs
