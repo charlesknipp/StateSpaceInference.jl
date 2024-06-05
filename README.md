@@ -31,26 +31,27 @@ And subsequently parameterize it with a named tuple for legibility.
 θ = (ση²=0.7, σε²=0.2)
 model = LocalLevel(θ)
 ```
+
 ## Filtering
 
-The estimation of latent states, and unbiased log evidence, is calculated via filtering. For linear Gaussian model, the Kalman filter yields an analytical solution to the problem; although, for both linear and non-linear models, the bootstrap particle filter is freely available to all state space models.
+The estimation of latent states, and unbiased log evidence, is calculated via filtering. For the linear Gaussian model, the Kalman filter yields an analytical solution to the problem. For non-linearities, the bootstrap particle filter is readily available.
 
-Using the local level model, we can extract the latent states for both filtering methods with relative ease.
+Using the above model, one can extract a tuple of final state particles (or a `Gaussian` in the case of the Kalman filter) and the log evidence.
 
 ```julia
-filtered_states, log_evidence = sample(rng, model, y, KF())
+states, log_evidence = sample(rng, model, y, KF())
 ```
 
-This can also be done iteratively using `filter_step!()` to successively update filtered states over time. For demonstration, one can define a bootstrap particle filter using the following:
+Instead of calling the wrapper, this can also be done iteratively using `filter_step!()` to update filtered states over time. For demonstration, one can program a bootstrap particle filter using the following:
 
 ```julia
 # 1024 partilces, resampled at every time step
 filter = PF(1024, 1.0)
 
-# first pass
+# sample from the prior
 particles, log_evidence = filter_step!(rng, model, filter)
 
-# primary iteration
+# transition particles through observations
 for t in eachindex(observations)
     particles, log_marginal = filter_step!(
         rng, model, particles, observations[t], filter;
@@ -63,7 +64,7 @@ end
 In addition to filtering methods, we can achieve particle smoothing using either particle geneology like so:
 
 ```julia
-# save_history must be true for this to work as intended
+particles, _  = sample(rng, model, y, PF(1024, 1.0); save_history=true)
 approx_smooth = geneology(particles)
 ```
 
@@ -76,7 +77,7 @@ ffbs_smooth = smooth(rng, model, y, PF(1024, 1.0))
 
 ## Parameter Estimation
 
-To estimate this models parameters, we have to pass a function which takes a single vector as an input. This vaguely follows the structure used throughtout AdvancedMH.jl from the Turing dev team. Furthermore, we must also define a prior for both parameters.
+To estimate this models parameters, we have to pass a function which takes a single vector as an input, and impose a prior to that function's inputs. This behavior mimics that of AdvancedMH.jl, but designed to only allocate what is necessary for parameter estimation.
 
 ```julia
 function local_level(params::AbstractVector)
@@ -92,7 +93,7 @@ prior = product_distribution(
 
 ### Particle Markov Chain Monte Carlo
 
-To estimate parameters in a stable, but time consuming manner, we can employ a Particle Marginal Metropolis Hastings (PMMH) sampler. For simplicity, we stick to random walk proposals, which ensure parameter estimates fall within the support of the prior.
+To estimate parameters in a stable, but time consuming manner, we can employ a Particle Marginal Metropolis Hastings (PMMH) sampler. For simplicity, we stick to a random walk proposal, which ensures parameter estimates fall within the support of the prior.
 
 We perform parameter estimation via PMMH like so, throwing out the first 1000 draws:
 
@@ -101,7 +102,7 @@ rw_kernel = θ -> MvNormal(θ, (0.1)*I(2))
 sampler = PMMH(5_000, rw_kernel, local_level, prior)
 
 # we can also use a particle filter here too
-post = sample(rng, sampler, y, KF(); burn_in = 1000)
+post = sample(rng, sampler, y, KF(); burn_in = 1_000)
 ```
 
 ### Sequential Monte Carlo
