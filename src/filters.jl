@@ -75,7 +75,7 @@ function systematic_resampling(
     u = oftype(v, rand(rng))
 
     # initialize sampling algorithm
-    a = Array{Int64}(undef, n)
+    a = Vector{Int64}(undef, n)
     idx = 1
 
     @inbounds for i in 1:n
@@ -88,6 +88,15 @@ function systematic_resampling(
     end
 
     return a
+end
+
+function categorical_resampling(
+        rng::AbstractRNG,
+        weights::AbstractVector{WT},
+        n::Int64 = length(weights)
+    ) where WT <: Real
+    cat = sampler(Categorical(weights))
+    return rand(rng, cat, n)
 end
 
 function filter_step!(
