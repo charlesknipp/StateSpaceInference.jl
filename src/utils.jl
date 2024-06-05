@@ -1,18 +1,33 @@
 ## FILTER STATISTICS ##########################################################
 
-get_states(particles::ParticleContainer) = vcat(getproperty.(particles.vals,:state)'...)
+get_states(particles::ParticleContainer) = vcat(getproperty.(particles.vals, :state)'...)
 StatsBase.weights(particles::ParticleContainer) = StatsBase.weights(softmax(particles.log_weights))
 
 function StatsBase.mean(particles::ParticleContainer)
-    return vec(StatsBase.mean(get_states(particles), StatsBase.weights(particles); dims=1))
+    μ = StatsBase.mean(
+        get_states(particles),
+        StatsBase.weights(particles);
+        dims = 1
+    )
+    
+    return vec(μ)
 end
 
 function StatsBase.cov(particles::ParticleContainer)
-    return StatsBase.cov(get_states(particles), StatsBase.weights(particles); dims=1)
+    return StatsBase.cov(
+        get_states(particles),
+        StatsBase.weights(particles);
+        dims = 1
+    )
 end
 
 function StatsBase.mean_and_cov(particles::ParticleContainer)
-    μ, Σ = StatsBase.mean_and_cov(get_states(particles), StatsBase.weights(particles), 1)
+    μ, Σ = StatsBase.mean_and_cov(
+        get_states(particles),
+        StatsBase.weights(particles),
+        1
+    )
+    
     return vec(μ), Σ
 end
 
@@ -23,29 +38,44 @@ StatsBase.mean_and_cov(particles::Gaussian) = (particles.μ, particles.Σ)
 get_parameters(particles::SMCState) = particles.parameters
 
 function StatsBase.mean(particles::SMCState)
-    return vec(StatsBase.mean(get_states(particles), StatsBase.weights(particles); dims=1))
+    μ = StatsBase.mean(
+        get_states(particles),
+        StatsBase.weights(particles);
+        dims = 1
+    )
+
+    return vec(μ)
 end
 
 function StatsBase.cov(particles::SMCState)
-    return StatsBase.cov(get_states(particles), StatsBase.weights(particles); dims=1)
+    return StatsBase.cov(
+        get_states(particles),
+        StatsBase.weights(particles);
+        dims = 1
+    )
 end
 
 function StatsBase.mean_and_cov(particles::SMCState)
-    μ, Σ = StatsBase.mean_and_cov(get_states(particles), StatsBase.weights(particles), 1)
+    μ, Σ = StatsBase.mean_and_cov(
+        get_states(particles),
+        StatsBase.weights(particles),
+        1
+    )
+
     return vec(μ), Σ
 end
 
 ## PARTICLE SMC STATISTICS ####################################################
 
-function get_states(particles::SMCState{XT,<:ParticleContainer}) where XT
+function get_states(particles::SMCState{XT, <:ParticleContainer}) where XT
     return vcat([get_states.(particles.states)...]...)
 end
 
-function get_states(particles::SMCState{XT,<:Gaussian}) where XT
-    return vcat(getproperty.(particles.states,:μ)'...)
+function get_states(particles::SMCState{XT, <:Gaussian}) where XT
+    return vcat(getproperty.(particles.states, :μ)'...)
 end
 
-function Base.pairs(particles::SMCState{XT,<:ParticleContainer}) where XT
+function Base.pairs(particles::SMCState{XT, <:ParticleContainer}) where XT
     N = length(particles.states[1])
     return (
         eachrow(get_states(particles)),
@@ -53,7 +83,7 @@ function Base.pairs(particles::SMCState{XT,<:ParticleContainer}) where XT
     )
 end
 
-function StatsBase.weights(particles::SMCState{XT,<:ParticleContainer}) where XT
+function StatsBase.weights(particles::SMCState{XT, <:ParticleContainer}) where XT
     param_weights = particles.log_weights
     state_weights = getproperty.(particles.states, :log_weights)
     log_weights = map(
@@ -66,24 +96,24 @@ end
 
 ## GAUSSIAN SMC STATISTICS ####################################################
 
-function Base.pairs(particles::SMCState{XT,<:Gaussian}) where XT
+function Base.pairs(particles::SMCState{XT, <:Gaussian}) where XT
     return eachrow(get_states(particles)), get_parameters(particles)
 end
 
 # create a new function to handle jointly covariate Gaussians
-function StatsBase.mean_and_cov(particles::SMCState{XT,<:Gaussian}) where XT
+function StatsBase.mean_and_cov(particles::SMCState{XT, <:Gaussian}) where XT
     weights = StatsBase.weights(particles)
     xdim = length(particles.states[1].μ)
     
-    μ = μd = zeros(xdim,1)
-    Σ = zeros(xdim,xdim)
+    μ = μd = zeros(xdim, 1)
+    Σ = zeros(xdim, xdim)
 
     for i in eachindex(weights)
         wi = weights[i]
         if wi > 0.0
             state = particles.states[i]
-            BLAS.axpy!(wi,state.μ,μ)
-            BLAS.axpy!(wi,state.Σ,Σ)
+            BLAS.axpy!(wi, state.μ, μ)
+            BLAS.axpy!(wi, state.Σ, Σ)
         end
     end
 
@@ -92,18 +122,18 @@ function StatsBase.mean_and_cov(particles::SMCState{XT,<:Gaussian}) where XT
         if wi > 0.0
             state = particles.states[i]
             μd = state.μ - μ
-            BLAS.axpy!(wi,μd*μd',Σ)
+            BLAS.axpy!(wi, μd*μd', Σ)
         end
     end
 
     return μ, Σ
 end
 
-function StatsBase.weights(particles::SMCState{XT,<:Gaussian}) where XT
+function StatsBase.weights(particles::SMCState{XT, <:Gaussian}) where XT
     return StatsBase.weights(softmax(particles.log_weights))
 end
 
-function StatsBase.cov(particles::SMCState{XT,<:Gaussian}) where XT
+function StatsBase.cov(particles::SMCState{XT, <:Gaussian}) where XT
     return StatsBase.mean_and_cov(particles)[2]
 end
 
@@ -114,10 +144,13 @@ function StatsBase.mean(f::Function, particles::SMCState)
     mapped_items = map(f, pairs(particles)...)
     if eltype(mapped_items) <: NamedTuple
         names, items = reduce_named_tuples(mapped_items)
-        means = map(x -> StatsBase.mean(x,StatsBase.weights(particles)), eachcol(items))
+        means = map(
+            x -> StatsBase.mean(x, StatsBase.weights(particles)),
+            eachcol(items)
+        )
         return NamedTuple{names}(means)
     else
-        return StatsBase.mean(mapped_items,weights(particles))
+        return StatsBase.mean(mapped_items, weights(particles))
     end
 end
 
@@ -128,7 +161,7 @@ end
 ## LINEARIZING ################################################################
 
 function geneology(particles::ParticleContainer)
-    lineage = linearize.(particles)
+    lineage = SSMProblems.Utils.linearize.(particles)
     return map(x -> hcat(x...), lineage)
 end
 
@@ -139,7 +172,7 @@ end
 
 
 function geneology(particles::SMCState{XT,<:ParticleContainer}) where XT
-    return vcat(map(geneology,particles.states)...)
+    return vcat(map(geneology, particles.states)...)
 end
 
 function smoothed_states(particles::SMCState{XT,<:ParticleContainer}) where XT
