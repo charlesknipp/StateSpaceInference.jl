@@ -23,13 +23,13 @@ function SMC(
     )
 end
 
-# maybe a type inference bug here!
+# TODO: check type inference
 function resample(
         rng::AbstractRNG,
         smc::SequentialMonteCarlo,
         weights::AbstractVector{<:Real}
     )
-    return smc.resampling_alg(rng,weights)
+    return smc.resampling_alg(rng, weights)
 end
 
 minimum_ess(smc::SequentialMonteCarlo) = smc.num_particles*smc.rs_threshold
@@ -45,7 +45,7 @@ Base.show(io::IO, particles::SMCState{θT,XT}) where {θT, XT} = begin
     print(io, "Particles{$XT}: ($(mean(particles)))")
 end
 
-# maybe some type instability here
+# TODO: check type inference
 function initialize_particles(
         rng::AbstractRNG,
         model,
@@ -100,15 +100,24 @@ function batch_sample!(
     return logposts
 end
 
-# TODO: use this method for particle rejuvenation for both SMC algorithms
+# TODO: there are far too many function arguments...
 function move_particles!(
         rng::AbstractRNG,
         particles::SMCState,
         smc::SequentialMonteCarlo,
         data::AbstractVector,
         model,
-        prior
+        prior;
+        temperature::Float64 = 1.0,
+        online::Bool = false
     )
+    weights = softmax(particles.log_weights)
+    ess_tracker = if online
+        @sprintf("t = %4d\tess = %7.2f", lastindex(data), ess(weights))
+    else
+        @sprintf("ξ = %1.4f\tess = %7.2f", temperature, ess(weights))
+    end
+
     ## resampling
     idx = resample(rng, smc, weights)
     particles.parameters = particles.parameters[idx]
@@ -123,11 +132,11 @@ function move_particles!(
         smc.filter,
         data,
         get_parameters(particles),
-        temperature = ξ,
+        temperature = temperature,
         msg = ess_tracker*"\t"
     )
 
-    particles.parameters = model.(getproperty.(chains, :params))
+    particles.parameters = getproperty.(chains, :params)
     particles.states = getproperty.(chains, :states)
     return getproperty.(chains, :log_evidence)
 end
@@ -175,28 +184,10 @@ function batch_tempered_smc(
             break
         end
 
-        ## resampling
-        idx = resample(rng, smc, weights)
-        particles.parameters = particles.parameters[idx]
-        particles.states = particles.states[idx]
-        fill!(particles.log_weights, 0.0)
-
-        ## rejuvenation
-        kernel = rw_kernel(particles)
-        chains = parallel_sample(
-            rng,
-            PMMH(smc.chain_length, kernel, model, prior),
-            smc.filter,
-            data,
-            get_parameters(particles),
-            temperature = ξ,
-            msg = ess_tracker*"\t"
+        logposts = move_particles!(
+            rng, particles, smc, data, model, prior;
+            temperature = ξ
         )
-
-        particles.parameters = getproperty.(chains, :params)
-        particles.states = getproperty.(chains, :states)
-        logposts = getproperty.(chains, :log_evidence)
-        # logposts = move_particles!(rng, particles, smc, data, model, prior)
     end
 
     return particles
@@ -208,7 +199,7 @@ function batch_tempered_smc(
         model,
         prior::Distribution
     )
-    return batch_tempered_smc(Random.default_rng(),smc,data,model,prior)
+    return batch_tempered_smc(Random.default_rng(), smc, data, model, prior)
 end
 
 function smc_iter(
@@ -221,31 +212,14 @@ function smc_iter(
     )
     M = smc.num_particles
     weights = StatsBase.weights(particles)
-    ess_tracker = @sprintf("t = %4d\tess = %7.2f",lastindex(data),ess(weights))
+    ess_tracker = @sprintf("t = %4d\tess = %7.2f", lastindex(data), ess(weights))
     print("\r"*ess_tracker)
 
     if ess(weights) < minimum_ess(smc)
-        # ## resampling
-        # idx = resample(rng, smc, weights)
-        # particles.parameters = particles.parameters[idx]
-        # particles.states = particles.states[idx]
-        # fill!(particles.log_weights, 0.0)
-
-        # ## rejuvenation
-        # kernel = rw_kernel(particles)
-        # chains = parallel_sample(
-        #     rng,
-        #     PMMH(smc.chain_length, kernel, model, prior),
-        #     smc.filter,
-        #     data,
-        #     get_parameters(particles),
-        #     temperature = ξ,
-        #     msg = ess_tracker*"\t"
-        # )
-
-        # particles.parameters = model.(getproperty.(chains, :params))
-        # particles.states = getproperty.(chains, :states)
-        move_particles!(rng, particles, smc, data, model, prior)
+        move_particles!(
+            rng, particles, smc, data, model, prior;
+            online = true
+        )
     end
 
     # for thread local reproducibility of parallel processing
@@ -264,12 +238,3 @@ function smc_iter(
 
     return particles
 end
-
-# function streaming_smc(
-#         smc::SequentialMonteCarlo,
-#         data::AbstractVector,
-#         model,
-#         prior::Distribution
-#     )
-    
-# end
